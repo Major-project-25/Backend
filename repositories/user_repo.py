@@ -1,8 +1,10 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import or_
 from model.user import User
 from schema.user_schema import UserCreate, AccountSetup
 from core.security import hash_password
 from uuid import UUID
+from typing import List
 
 # For the Sign-Up API
 def create_user(db: Session, user: UserCreate) -> User:
@@ -36,3 +38,31 @@ def setup_user_account(db: Session, user_id: UUID, profile_data: AccountSetup) -
 def get_user_by_email(db: Session, email: str) -> User | None:
     """Fetches a single user by their email address."""
     return db.query(User).filter(User.email == email).first()
+
+def get_all_active_users(db: Session) -> List[User]:
+    """
+    Fetches all users who have set at least one interest.
+    These are the users who are eligible for matching.
+    """
+    return db.query(User).filter(User.name != None, User.interest1 != None).all()
+
+def update_user_matches(db: Session, user_id: UUID, matched_ids: List[UUID]) -> User | None:
+    """
+    Finds a user by their ID and updates their matched_profiles list.
+    """
+    db_user = db.query(User).filter(User.id == user_id).first()
+    
+    if not db_user:
+        return None
+
+    setattr(db_user, 'matched_profiles', matched_ids)
+    
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+def get_user_by_reg_no(db: Session, reg_no: str) -> User | None:
+    """
+    Fetches a single user by their university registration number.
+    """
+    return db.query(User).filter(User.university_reg_no == reg_no).first()

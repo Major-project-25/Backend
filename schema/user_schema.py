@@ -1,8 +1,10 @@
+# user_schema.py
+
 from pydantic import BaseModel, EmailStr
-from typing import List, Optional
+from typing import Optional
 from uuid import UUID
 
-# --- User Schemas ---
+# --- Response Schemas ---
 
 class BooleanResponse(BaseModel):
     is_valid: bool
@@ -11,7 +13,12 @@ class ValidationResponse(BaseModel):
     is_valid: bool
     user_id: Optional[UUID] = None
 
-# Schema for the Sign-Up API (only email and password)
+class StatusResponse(BaseModel):
+    message: str
+
+# --- Data Schemas ---
+
+# Schema for Sign-Up AND Login (requires email and password)
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
@@ -28,7 +35,7 @@ class AccountSetup(BaseModel):
     interest3: Optional[str] = None
     interest3_weight: Optional[int] = None
 
-# Schema for returning user data
+# Schema for returning user data to the client
 class UserRead(BaseModel):
     id: UUID
     email: EmailStr
@@ -44,12 +51,3 @@ class UserRead(BaseModel):
 
     class Config:
         from_attributes = True
-
-# Defines the expected JSON body for the login request
-class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str
-
-# A simple schema for returning a status message
-class StatusResponse(BaseModel):
-    message: str
