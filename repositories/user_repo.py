@@ -66,3 +66,7 @@ def get_user_by_reg_no(db: Session, reg_no: str) -> User | None:
     Fetches a single user by their university registration number.
     """
     return db.query(User).filter(User.university_reg_no == reg_no).first()
+
+def get_user_by_id(db: Session, user_id: UUID) -> User | None:
+    """ Fetches a single user by their primary key ID. """
+    return db.query(User).filter(User.id == user_id).first()
