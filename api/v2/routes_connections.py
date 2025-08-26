@@ -32,13 +32,19 @@ def view_received_requests(user_id: UUID, db: Session = Depends(get_db)):
     """ 2. Viewing Received (Pending) Requests """
     pending_connections = connection_services.view_pending_requests(db, user_id=user_id)
     
-    # Transform the full user object into the desired response model
     response = []
     for conn in pending_connections:
-        requester_details = PendingRequestDetail.model_validate(conn.requester)
-        # We need to manually add the requester_id since it's not in the User model
-        requester_details.requester_id = conn.requester_id
-        response.append(requester_details)
+        # Manually construct the response object to satisfy Pydantic's validation
+        response.append(
+            PendingRequestDetail(
+                requester_id=conn.requester_id,  # Get the ID from the connection
+                university_reg_no=conn.requester.university_reg_no, # Get details from the user object
+                biography=conn.requester.biography,
+                interest1=conn.requester.interest1,
+                interest2=conn.requester.interest2,
+                interest3=conn.requester.interest3,
+            )
+        )
         
     return response
 
