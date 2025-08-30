@@ -51,3 +51,26 @@ class UserRead(BaseModel):
 
     class Config:
         from_attributes = True
+
+# schema/user_schema.py
+
+from pydantic import BaseModel, EmailStr
+from typing import List, Optional
+from uuid import UUID
+
+# ... (keep all other existing schemas) ...
+
+# --- ADD THIS NEW RESPONSE SCHEMA ---
+
+class UserProfile(BaseModel):
+    """
+    Defines the public profile information for a user.
+    """
+    university_reg_no: Optional[str] = None
+    biography: Optional[str] = None
+    interest1: Optional[str] = None
+    interest2: Optional[str] = None
+    interest3: Optional[str] = None
+
+    class Config:
+        from_attributes = True
