@@ -19,11 +19,15 @@ def get_conversation(db: Session, user1_id: UUID, user2_id: UUID) -> List[Messag
 
 def generate_meet_link(user1_id: UUID, user2_id: UUID) -> str:
     """
-    Generates a consistent Google Meet link for two users.
+    Generates a consistent and functional Jitsi Meet link for two users.
     Sorting the UUIDs ensures both users always get the same link.
     """
-    # Sort UUIDs to ensure the room name is always the same regardless of who initiates
+    # Sort UUIDs to ensure the room name is always the same
     ids = sorted([str(user1_id), str(user2_id)])
-    room_name = "".join(ids).replace("-", "")
-    return f"https://meet.google.com/lookup/{room_name}"
+    # We use a prefix to make it clear this is for our app and hash the long string
+    # to keep the URL a reasonable length.
+    import hashlib
+    room_name = hashlib.sha256("".join(ids).encode()).hexdigest()
+    
+    return f"https://meet.jit.si/KnowYourCampus-{room_name}"
 
