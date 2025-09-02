@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from uuid import UUID
 from DB.session import get_db
-from schema.user_schema import UserCreate, AccountSetup, ValidationResponse, BooleanResponse, UserProfile,GetFullProfile
+from schema.user_schema import UserCreate, AccountSetup, ValidationResponse, BooleanResponse, UserProfile
 from services import user_services
 from repositories import user_repo
 
@@ -63,7 +63,7 @@ def get_user_profile(user_id: UUID, db: Session = Depends(get_db)):
     
     return user
 
-@router.get("/{user_id}/Fullprofile", response_model=GetFullProfile)
+@router.get("/{user_id}/Fullprofile", response_model=AccountSetup)
 def get_user_Fullprofile(user_id: UUID, db: Session = Depends(get_db)):
     """
     Fetches a user's public profile details (USN, bio, and interests)

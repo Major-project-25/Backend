@@ -25,6 +25,8 @@ class UserCreate(BaseModel):
 
 # Schema for the Account Setup API
 class AccountSetup(BaseModel):
+    name: Optional[str] = None
+    university_reg_no: Optional[str] = None
     biography: Optional[str] = None
     interest1: Optional[str] = None
     interest1_weight: Optional[int] = None
@@ -50,17 +52,6 @@ class UserRead(BaseModel):
     class Config:
         from_attributes = True
 """
-# Schema for returning complete details of user
-class GetFullProfile(BaseModel):
-    name: str
-    university_reg_no: str
-    biography: Optional[str] = None
-    interest1: Optional[str] = None
-    interest1_weight: Optional[int] = None
-    interest2: Optional[str] = None
-    interest2_weight: Optional[int] = None
-    interest3: Optional[str] = None
-    interest3_weight: Optional[int] = None
 
 class UserProfile(BaseModel):
     """
