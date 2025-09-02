@@ -1,7 +1,8 @@
 from sqlalchemy import Column, String, Text, Boolean, TIMESTAMP, ARRAY,SmallInteger
-from sqlalchemy.dialects.postgresql import UUID, JSONB  # Import JSONB
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from DB.base import Base
 import uuid
+from sqlalchemy.orm import relationship
 
 class User(Base):
     __tablename__ = "users"
@@ -21,3 +22,8 @@ class User(Base):
     interest3 = Column(String(50), nullable=True)
     interest3_weight = Column(SmallInteger, nullable=True)
     matched_profiles = Column(ARRAY(UUID(as_uuid=True)), default=[])
+
+    # Relationships to messages
+    messages_sent = relationship("Message", foreign_keys="[Message.sender_id]", back_populates="sender")
+    messages_received = relationship("Message", foreign_keys="[Message.receiver_id]", back_populates="receiver")
+
