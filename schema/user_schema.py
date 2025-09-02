@@ -25,8 +25,6 @@ class UserCreate(BaseModel):
 
 # Schema for the Account Setup API
 class AccountSetup(BaseModel):
-    name: str
-    university_reg_no: str
     biography: Optional[str] = None
     interest1: Optional[str] = None
     interest1_weight: Optional[int] = None
@@ -35,7 +33,7 @@ class AccountSetup(BaseModel):
     interest3: Optional[str] = None
     interest3_weight: Optional[int] = None
 
-# Schema for returning user data to the client
+"""# Schema for returning user data to the client
 class UserRead(BaseModel):
     id: UUID
     email: EmailStr
@@ -51,16 +49,18 @@ class UserRead(BaseModel):
 
     class Config:
         from_attributes = True
-
-# schema/user_schema.py
-
-from pydantic import BaseModel, EmailStr
-from typing import List, Optional
-from uuid import UUID
-
-# ... (keep all other existing schemas) ...
-
-# --- ADD THIS NEW RESPONSE SCHEMA ---
+"""
+# Schema for returning complete details of user
+class GetFullProfile(BaseModel):
+    name: str
+    university_reg_no: str
+    biography: Optional[str] = None
+    interest1: Optional[str] = None
+    interest1_weight: Optional[int] = None
+    interest2: Optional[str] = None
+    interest2_weight: Optional[int] = None
+    interest3: Optional[str] = None
+    interest3_weight: Optional[int] = None
 
 class UserProfile(BaseModel):
     """

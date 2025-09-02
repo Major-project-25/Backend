@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from uuid import UUID
 from DB.session import get_db
-from schema.user_schema import UserCreate, AccountSetup, ValidationResponse, BooleanResponse, UserProfile
+from schema.user_schema import UserCreate, AccountSetup, ValidationResponse, BooleanResponse, UserProfile,GetFullProfile
 from services import user_services
 from repositories import user_repo
 
@@ -48,6 +48,23 @@ def setup_user_profile(user_id: UUID, profile_data: AccountSetup, db: Session = 
 
 @router.get("/{user_id}/profile", response_model=UserProfile)
 def get_user_profile(user_id: UUID, db: Session = Depends(get_db)):
+    """
+    Fetches a user's public profile details (USN, bio, and interests)
+    using their UUID.
+    """
+    # The get_user_by_id function already exists in your repo
+    user = user_repo.get_user_by_id(db, user_id=user_id)
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User with this ID not found.",
+        )
+    
+    return user
+
+@router.get("/{user_id}/Fullprofile", response_model=GetFullProfile)
+def get_user_Fullprofile(user_id: UUID, db: Session = Depends(get_db)):
     """
     Fetches a user's public profile details (USN, bio, and interests)
     using their UUID.
