@@ -14,6 +14,12 @@ def create_message(db: Session, sender_id: UUID, receiver_id: UUID, content: str
     db.refresh(db_message)
     return db_message
 
+
+"""
+The get_chat_history function gives reterives all the previous messages we need to get the messages between fixed time periods.
+This change has to be made.
+"""
+
 def get_chat_history(db: Session, user1_id: UUID, user2_id: UUID) -> List[Message]:
     """ Retrieves all messages between two users, ordered by time. """
     return db.query(Message).filter(

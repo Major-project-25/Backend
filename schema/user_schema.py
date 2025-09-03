@@ -1,5 +1,13 @@
 # user_schema.py
 
+"""
+Fixes to be done:
+1)To many schemas are present try to minimize it. check if same schema can be used for multiple operations.
+2)use the same schema for get profile and get full profile
+3)
+4)
+"""
+
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 from uuid import UUID

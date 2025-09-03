@@ -1,5 +1,13 @@
 # routes_users.py
 
+"""
+Fixes to be made:
+1)get profile and get full profile are very similar. replace get profile with getfullprofile
+2)
+3)
+4)
+"""
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from uuid import UUID
