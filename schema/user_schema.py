@@ -1,5 +1,13 @@
 # user_schema.py
 
+"""
+Fixes to be done:
+1)To many schemas are present try to minimize it. check if same schema can be used for multiple operations.
+2)use the same schema for get profile and get full profile
+3)
+4)
+"""
+
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 from uuid import UUID
@@ -25,8 +33,8 @@ class UserCreate(BaseModel):
 
 # Schema for the Account Setup API
 class AccountSetup(BaseModel):
-    name: str
-    university_reg_no: str
+    name: Optional[str] = None
+    university_reg_no: Optional[str] = None
     biography: Optional[str] = None
     interest1: Optional[str] = None
     interest1_weight: Optional[int] = None
@@ -35,7 +43,7 @@ class AccountSetup(BaseModel):
     interest3: Optional[str] = None
     interest3_weight: Optional[int] = None
 
-# Schema for returning user data to the client
+"""# Schema for returning user data to the client
 class UserRead(BaseModel):
     id: UUID
     email: EmailStr
@@ -51,16 +59,7 @@ class UserRead(BaseModel):
 
     class Config:
         from_attributes = True
-
-# schema/user_schema.py
-
-from pydantic import BaseModel, EmailStr
-from typing import List, Optional
-from uuid import UUID
-
-# ... (keep all other existing schemas) ...
-
-# --- ADD THIS NEW RESPONSE SCHEMA ---
+"""
 
 class UserProfile(BaseModel):
     """

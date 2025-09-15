@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Chat Tester</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .message {
+            max-width: 70%;
+            word-wrap: break-word;
+        }
+        .sent {
+            align-self: flex-end;
+            background-color: #3b82f6; /* blue-500 */
+            color: white;
+        }
+        .received {
+            align-self: flex-start;
+            background-color: #e5e7eb; /* gray-200 */
+            color: #1f2937; /* gray-800 */
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex flex-col items-center justify-center min-h-screen p-4">
+
+    <div class="w-full max-w-2xl bg-white rounded-lg shadow-xl p-6 space-y-4">
+        <h1 class="text-2xl font-bold text-gray-800 text-center">KnowYourCampus Chat Tester</h1>
+        
+        <!-- Connection Section -->
+        <div id="connection-form" class="space-y-3">
+            <h2 class="text-lg font-semibold text-gray-700">1. Connect to Server</h2>
+            <div>
+                <label for="my-uuid" class="block text-sm font-medium text-gray-600">Your User UUID:</label>
+                <input type="text" id="my-uuid" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500" placeholder="Enter your UUID to connect">
+            </div>
+            <div class="flex space-x-2">
+                <button onclick="connect()" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition duration-300 ease-in-out">Connect</button>
+                <button onclick="disconnect()" id="disconnect-btn" class="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition duration-300 ease-in-out" disabled>Disconnect</button>
+            </div>
+            <div id="status" class="text-sm text-center text-gray-500 font-medium">Status: Disconnected</div>
+        </div>
+
+        <!-- Chat Section (Initially Hidden) -->
+        <div id="chat-section" class="hidden space-y-3">
+            <hr>
+            <h2 class="text-lg font-semibold text-gray-700">2. Send a Message</h2>
+            <div>
+                <label for="recipient-uuid" class="block text-sm font-medium text-gray-600">Recipient User UUID:</label>
+                <input type="text" id="recipient-uuid" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500" placeholder="Enter recipient's UUID">
+            </div>
+            <div>
+                 <label for="message-input" class="block text-sm font-medium text-gray-600">Message:</label>
+                <div class="mt-1 flex rounded-md shadow-sm">
+                    <input type="text" id="message-input" class="flex-1 block w-full min-w-0 rounded-none rounded-l-md px-3 py-2 border-gray-300 focus:ring-blue-500 focus:border-blue-500" placeholder="Type your message...">
+                    <button onclick="sendMessage()" class="inline-flex items-center px-4 py-2 border border-l-0 border-gray-300 bg-gray-50 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-r-md">Send</button>
+                </div>
+            </div>
+            
+            <h2 class="text-lg font-semibold text-gray-700 pt-2">3. Conversation</h2>
+            <div id="messages" class="h-64 overflow-y-auto border bg-gray-50 rounded-lg p-3 flex flex-col space-y-2">
+                <!-- Messages will appear here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+
+        function setStatus(text, colorClass) {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = `Status: ${text}`;
+            statusEl.className = `text-sm text-center font-medium ${colorClass}`;
+        }
+
+        function connect() {
+            const myUuid = document.getElementById('my-uuid').value.trim();
+            if (!myUuid) {
+                alert('Please enter your User UUID.');
+                return;
+            }
+
+            // Replace with your server's WebSocket URL
+            const wsUrl = `ws://127.0.0.1:8000/api/v3/messages/ws/${myUuid}`;
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = function(event) {
+                setStatus('Connected', 'text-green-600');
+                document.getElementById('disconnect-btn').disabled = false;
+                document.getElementById('connection-form').classList.add('opacity-50', 'pointer-events-none');
+                document.getElementById('chat-section').classList.remove('hidden');
+            };
+
+            ws.onmessage = function(event) {
+                const messageData = JSON.parse(event.data);
+                displayMessage(messageData, 'received');
+            };
+
+            ws.onerror = function(event) {
+                console.error('WebSocket error:', event);
+                setStatus('Error', 'text-red-600');
+            };
+
+            ws.onclose = function(event) {
+                setStatus('Disconnected', 'text-gray-500');
+                document.getElementById('disconnect-btn').disabled = true;
+                 document.getElementById('connection-form').classList.remove('opacity-50', 'pointer-events-none');
+                document.getElementById('chat-section').classList.add('hidden');
+                ws = null;
+            };
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+            }
+        }
+
+        function sendMessage() {
+            if (!ws) {
+                alert('Not connected.');
+                return;
+            }
+            const recipientUuid = document.getElementById('recipient-uuid').value.trim();
+            const messageInput = document.getElementById('message-input');
+            const content = messageInput.value.trim();
+
+            if (!recipientUuid || !content) {
+                alert('Please provide a recipient UUID and a message.');
+                return;
+            }
+
+            const message = {
+                receiver_id: recipientUuid,
+                content: content
+            };
+
+            ws.send(JSON.stringify(message));
+            
+            // Display the sent message immediately
+            const sentMessageData = {
+                sender_id: document.getElementById('my-uuid').value.trim(),
+                receiver_id: recipientUuid,
+                content: content,
+                timestamp: new Date().toISOString()
+            };
+            displayMessage(sentMessageData, 'sent');
+            
+            messageInput.value = '';
+        }
+
+        function displayMessage(messageData, type) {
+            const messagesContainer = document.getElementById('messages');
+            const messageEl = document.createElement('div');
+            messageEl.classList.add('p-2', 'rounded-lg', 'message', type);
+            
+            const content = document.createElement('p');
+            content.textContent = messageData.content;
+            
+            const timestamp = document.createElement('span');
+            timestamp.classList.add('text-xs', 'opacity-70', 'block', 'mt-1');
+            timestamp.textContent = new Date(messageData.timestamp).toLocaleTimeString();
+            
+            messageEl.appendChild(content);
+            messageEl.appendChild(timestamp);
+            
+            messagesContainer.appendChild(messageEl);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight; // Auto-scroll
+        }
+    </script>
+</body>
+</html>

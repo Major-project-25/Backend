@@ -33,3 +33,14 @@ def get_accepted_connections(db: Session, user_id: UUID) -> List[Connection]:
         or_(Connection.requester_id == user_id, Connection.addressee_id == user_id),
         Connection.status == 'accepted'
     ).all()
+
+def check_if_users_are_connected(db: Session, user1_id: UUID, user2_id: UUID) -> bool:
+    """ Checks if an 'accepted' connection exists between two users. """
+    connection = db.query(Connection).filter(
+        or_(
+            (Connection.requester_id == user1_id) & (Connection.addressee_id == user2_id),
+            (Connection.requester_id == user2_id) & (Connection.addressee_id == user1_id)
+        ),
+        Connection.status == 'accepted'
+    ).first()
+    return connection is not None
