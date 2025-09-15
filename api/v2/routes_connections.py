@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from uuid import UUID
 from typing import List
 from DB.session import get_db
-from schema.connections import ConnectionRequest, ConnectionUpdate, StatusResponse, PendingRequestDetail, FriendsResponse
+from schema.connections import ConnectionRequest, ConnectionUpdate, StatusResponse, PendingRequestDetail, FriendsResponse, FriendDetail
 from services import connection_services
 from repositories import user_repo # Import user_repo to get user details
 
@@ -62,19 +62,26 @@ def respond_to_connection_request(user_id: UUID, update: ConnectionUpdate, db: S
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
+
+# --- THIS IS THE FIXED ENDPOINT ---
 @router.get("/{user_id}/friends", response_model=FriendsResponse)
 def view_all_accepted_connections(user_id: UUID, db: Session = Depends(get_db)):
     """ 4. Viewing All Accepted Connections (Friends) """
     connections = connection_services.view_friends(db, user_id=user_id)
     
-    usns = []
+    friends_list = []
     for conn in connections:
-        # Get the USN of the *other* person in the connection
-        if conn.requester_id == user_id:
-            if conn.addressee.university_reg_no:
-                usns.append(conn.addressee.university_reg_no)
-        else:
-            if conn.requester.university_reg_no:
-                usns.append(conn.requester.university_reg_no)
-                
-    return {"usns": usns}
+        # Determine who the "other person" in the connection is
+        other_person = conn.addressee if conn.requester_id == user_id else conn.requester
+        
+        # Create a detailed object for each friend
+        friends_list.append(
+            FriendDetail(
+                user_id=other_person.id,
+                university_reg_no=other_person.university_reg_no,
+                name=other_person.name
+            )
+        )
+        
+    # Return the data with the CORRECT key: "friends"
+    return {"friends": friends_list}
