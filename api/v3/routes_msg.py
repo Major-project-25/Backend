@@ -1,58 +1,56 @@
 # api/v3/routes_msg.py
-
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 from uuid import UUID
 from typing import List
-
-from DB.session import get_db, SessionLocal
 from schema.messages import MessageCreate, MessageResponse, MeetLinkResponse
-from services import messages_services
-from services.websocket_manager import manager # Import the manager
+from services import messages_services, websocket_manager
 from repositories import connections_repo
+from DB.session import get_db, SessionLocal
+# We need the decryption function here as well
+from core.encryption import decrypt_message
 
 router = APIRouter()
 
-# --- WebSocket Endpoint for Real-Time Chat ---
-
 @router.websocket("/ws/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: UUID):
-    await manager.connect(user_id, websocket)
+    """ The main real-time WebSocket endpoint for chat. """
+    await websocket_manager.manager.connect(user_id, websocket)
     db: Session = SessionLocal()
     try:
         while True:
             data = await websocket.receive_json()
             message_data = MessageCreate.model_validate(data)
-
-            # --- ADD THIS SECURITY CHECK ---
+            
+            # ... (Security check remains the same)
             are_connected = connections_repo.check_if_users_are_connected(
                 db, user1_id=user_id, user2_id=message_data.receiver_id
             )
-
             if not are_connected:
-                # Optionally send an error back to the sender
-                await manager.send_json(
+                await websocket_manager.manager.send_json(
                     {"error": "You can only message your connections."}, user_id
                 )
-                continue # Skip the rest of the loop
-            # --- END OF SECURITY CHECK ---
+                continue
 
-            # 1. Save the message to the database (only if connected)
+            # 1. Service layer encrypts and saves the message.
+            # The returned `db_message` object has ENCRYPTED content.
             db_message = messages_services.send_message(
                 db, 
                 sender_id=user_id, 
                 receiver_id=message_data.receiver_id, 
                 content=message_data.content
             )
-            
-            # 2. Convert to JSON-ready dict
-            message_to_send = MessageResponse.model_validate(db_message).model_dump(mode="json")
 
-            # 3. Send the message
-            await manager.send_json(message_to_send, message_data.receiver_id)
+            # 2. Prepare the response to be sent over the WebSocket.
+            # We must DECRYPT the content again before sending it.
+            response_data = MessageResponse.model_validate(db_message).model_dump(mode="json")
+            response_data['content'] = decrypt_message(db_message.content) # Explicitly decrypt for sending
+
+            # 3. Send the DECRYPTED message to the recipient.
+            await websocket_manager.manager.send_json(response_data, message_data.receiver_id)
 
     except WebSocketDisconnect:
-        manager.disconnect(user_id)
+        websocket_manager.manager.disconnect(user_id)
     except Exception as e:
         print(f"Error in websocket for user {user_id}: {e}")
     finally:
