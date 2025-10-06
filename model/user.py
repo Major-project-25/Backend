@@ -23,7 +23,8 @@ class User(Base):
     interest3_weight = Column(SmallInteger, nullable=True)
     matched_profiles = Column(ARRAY(UUID(as_uuid=True)), default=[])
 
+    is_admin = Column(Boolean, default=False)
+
     # Relationships to messages
     messages_sent = relationship("Message", foreign_keys="[Message.sender_id]", back_populates="sender")
     messages_received = relationship("Message", foreign_keys="[Message.receiver_id]", back_populates="receiver")
-

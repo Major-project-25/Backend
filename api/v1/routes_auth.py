@@ -20,7 +20,7 @@ def login_user(login_data: UserCreate, db: Session = Depends(get_db)):
 
     if authenticated_user:
         # If the service returns a user object, login was successful
-        return {"is_valid": True, "user_id": authenticated_user.id}
+        return {"is_valid": True, "user_id": authenticated_user.id, "is_admin": authenticated_user.is_admin}
     else:
         # If the service returns None, credentials were invalid
-        return {"is_valid": False, "user_id": None}
+        return {"is_valid": False, "user_id": None, "is_admin": False}

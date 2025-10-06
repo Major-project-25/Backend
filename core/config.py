@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "KnowYourCampus"
-    DATABASE_URL: str = "postgresql+psycopg2://kyc:knowyourcampus@172.17.2.12:5432/knowyourcampus" #WIFI
+    DATABASE_URL: str = "postgresql+psycopg2://kyc:knowyourcampus@172.17.1.140:5432/knowyourcampus" #WIFI
     #DATABASE_URL: str = "postgresql+psycopg2://kyc:knowyourcampus@10.24.200.210:5432/knowyourcampus" #HOTSPOT
     SECRET_KEY: str = "supersecret"  # Replace with env var
     ALGORITHM: str = "HS256"
