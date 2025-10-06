@@ -62,8 +62,8 @@ app/
 ⚙️ Setup & Installation
 1️⃣ Clone the Repository
 ```bash
-git clone https://github.com/your-username/chat-backend.git
-cd chat-backend
+git clone https://github.com/Major-project-25/Backend.git
+cd Backend
 ```
 2️⃣ Create a Virtual Environment
 ```bash
