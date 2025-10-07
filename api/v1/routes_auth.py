@@ -14,6 +14,7 @@ def login_user(login_data: UserCreate, db: Session = Depends(get_db)):
     Handles user login by calling the authentication service.
     - If credentials are correct, returns True + user's UUID.
     - If credentials are incorrect, returns False.
+    - Also tells if the user is admin or not.
     """
     # Call the service to handle all authentication logic
     authenticated_user = user_services.authenticate_user_service(db, login_data=login_data)

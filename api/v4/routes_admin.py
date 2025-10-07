@@ -66,7 +66,7 @@ def create_post(
             )
 
         # Save the file to a static directory
-        file_path = f"Backend/static/uploads/{file.filename}"
+        file_path = f"static/uploads/{file.filename}"
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
