@@ -20,6 +20,7 @@ class BooleanResponse(BaseModel):
 class ValidationResponse(BaseModel):
     is_valid: bool
     user_id: Optional[UUID] = None
+    is_admin: Optional[bool] = False
 
 class StatusResponse(BaseModel):
     message: str
