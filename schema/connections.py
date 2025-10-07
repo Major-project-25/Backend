@@ -32,9 +32,21 @@ class PendingRequestDetail(BaseModel):
     class Config:
         from_attributes = True
 
+# --- THIS SECTION IS NEW AND CORRECTED ---
+
+class FriendDetail(BaseModel):
+    """ Defines the detailed information for a single friend. """
+    user_id: UUID
+    university_reg_no: Optional[str] = None
+    name: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
 class FriendsResponse(BaseModel):
-    """ A list of University Seat Numbers (USNs) for friends. """
-    usns: List[str]
+    """ A list of detailed friend objects. """
+    friends: List[FriendDetail]
+
 
 # --- UNUSED (can be kept or removed) ---
 
