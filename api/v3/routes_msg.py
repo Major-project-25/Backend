@@ -13,7 +13,8 @@ from core.encryption import decrypt_message
 
 router = APIRouter()
 
-# --- NEW HTTP ENDPOINT FOR MEDIA UPLOADS ---
+# --- HTTP ENDPOINT FOR MEDIA UPLOADS ---
+# THIS IS THE CORRECTED LINE:
 @router.post("/upload-media", response_model=MediaUploadResponse, status_code=status.HTTP_201_CREATED)
 async def upload_media_file(file: UploadFile = File(...)):
     """
@@ -51,15 +52,18 @@ async def websocket_endpoint(websocket: WebSocket, user_id: UUID):
                 data = await websocket.receive_json()
                 message_data = MessageCreate.model_validate(data)
                 
-                # Moderate text content if it exists
+                # --- THIS IS THE MODIFIED MODERATION BLOCK ---
                 if message_data.content and moderation_service.is_message_offensive(message_data.content):
-                    await websocket_manager.manager.send_json(
-                        {"error": "Your message was flagged as potentially offensive and was not sent."}, user_id
-                    )
+                    # Send a structured warning back to the original sender.
+                    await websocket_manager.manager.send_json({
+                        "type": "moderation_warning",
+                        "message": "Your message was not sent because it was flagged as potentially offensive."
+                    }, user_id)
                     continue
+                # ---------------------------------------------
                 
                 are_connected = connections_repo.check_if_users_are_connected(
-                    db, user_id=user_id, user2_id=message_data.receiver_id
+                    db, user1_id=user_id, user2_id=message_data.receiver_id
                 )
                 if not are_connected:
                     await websocket_manager.manager.send_json(
@@ -79,9 +83,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: UUID):
                 if response_data['content']:
                     response_data['content'] = decrypt_message(db_message.content)
                 
-                # Send the message to the recipient
                 await websocket_manager.manager.send_json(response_data, message_data.receiver_id)
-                # ALSO send the message back to the sender so their UI can update
                 await websocket_manager.manager.send_json(response_data, user_id)
 
             finally:
@@ -93,23 +95,17 @@ async def websocket_endpoint(websocket: WebSocket, user_id: UUID):
         print(f"Error in websocket for user {user_id}: {e}")
 
 
-# --- HTTP Endpoints for Chat History and Video Calls (Unchanged) ---
+# --- HTTP Endpoints (Unchanged) ---
 @router.get("/{user_id}/conversation/{other_user_id}", response_model=List[MessageResponse])
 def get_message_history(user_id: UUID, other_user_id: UUID, db: Session = Depends(get_db)):
-    """ Retrieves the chat history between the user and another user. """
     return messages_services.get_conversation(db, user1_id=user_id, user2_id=other_user_id)
 
 
 @router.get("/{user_id}/meet/{other_user_id}", response_model=MeetLinkResponse)
 async def get_video_call_link(user_id: UUID, other_user_id: UUID, db: Session = Depends(get_db)):
-    """ 
-    Generates a unique Google Meet link and sends a real-time notification 
-    to the other user.
-    """
     caller = user_repo.get_user_by_id(db, user_id)
     if not caller:
         return {"error": "Caller not found."}
-
     link = messages_services.generate_meet_link(user_id, other_user_id)
     notification_payload = {
         "type": "video_call_invitation",
