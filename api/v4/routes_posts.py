@@ -45,8 +45,7 @@ def react_to_a_post(
     post_id: UUID,
     user_id: UUID,
     reaction: ReactionCreate,
-    db: Session = Depends(get_db)
-):
+    db: Session = Depends(get_db)):
     """
     Allows a user to 'like', 'dislike', or remove their reaction ('none') from a post.
     """

@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from uuid import UUID
 import shutil
 import os
+import uuid # <-- 1. IMPORT THE UUID LIBRARY
 from typing import List
 from schema.messages import MessageCreate, MessageResponse, MeetLinkResponse, MediaUploadResponse
 from services import messages_services, websocket_manager, moderation_service
@@ -14,20 +15,22 @@ from core.encryption import decrypt_message
 router = APIRouter()
 
 # --- HTTP ENDPOINT FOR MEDIA UPLOADS ---
-# THIS IS THE CORRECTED LINE:
 @router.post("/upload-media", response_model=MediaUploadResponse, status_code=status.HTTP_201_CREATED)
 async def upload_media_file(file: UploadFile = File(...)):
     """
     Handles uploading image or video files for chat.
     Saves the file and returns its web-accessible URL.
     """
-    # Get the absolute path from the main.py file's location
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     CHAT_MEDIA_DIR = os.path.join(BASE_DIR, "static", "chat_media")
 
-    # Generate a unique filename to prevent overwrites
     file_extension = os.path.splitext(file.filename)[1]
-    unique_filename = f"{UUID(int=os.urandom(16).hex())}{file_extension}"
+    
+    # --- 2. THIS IS THE CORRECTED LINE ---
+    # Generate a standard random UUID for the filename.
+    unique_filename = f"{uuid.uuid4()}{file_extension}"
+    # ------------------------------------
+
     file_path = os.path.join(CHAT_MEDIA_DIR, unique_filename)
 
     try:
@@ -36,7 +39,6 @@ async def upload_media_file(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Could not save file: {e}")
 
-    # Return the URL path that the frontend can use
     media_url = f"/static/chat_media/{unique_filename}"
     return {"media_url": media_url}
 
@@ -52,15 +54,12 @@ async def websocket_endpoint(websocket: WebSocket, user_id: UUID):
                 data = await websocket.receive_json()
                 message_data = MessageCreate.model_validate(data)
                 
-                # --- THIS IS THE MODIFIED MODERATION BLOCK ---
                 if message_data.content and moderation_service.is_message_offensive(message_data.content):
-                    # Send a structured warning back to the original sender.
                     await websocket_manager.manager.send_json({
                         "type": "moderation_warning",
                         "message": "Your message was not sent because it was flagged as potentially offensive."
                     }, user_id)
                     continue
-                # ---------------------------------------------
                 
                 are_connected = connections_repo.check_if_users_are_connected(
                     db, user1_id=user_id, user2_id=message_data.receiver_id
