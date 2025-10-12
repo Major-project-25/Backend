@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from uuid import UUID
 import shutil
 import os
-import uuid # <-- 1. IMPORT THE UUID LIBRARY
+import uuid 
 from typing import List
 from schema.messages import MessageCreate, MessageResponse, MeetLinkResponse, MediaUploadResponse
 from services import messages_services, websocket_manager, moderation_service
@@ -26,10 +26,8 @@ async def upload_media_file(file: UploadFile = File(...)):
 
     file_extension = os.path.splitext(file.filename)[1]
     
-    # --- 2. THIS IS THE CORRECTED LINE ---
-    # Generate a standard random UUID for the filename.
+    # Generate a standard random UUID for the filename to prevent overwrites.
     unique_filename = f"{uuid.uuid4()}{file_extension}"
-    # ------------------------------------
 
     file_path = os.path.join(CHAT_MEDIA_DIR, unique_filename)
 
@@ -49,11 +47,13 @@ async def websocket_endpoint(websocket: WebSocket, user_id: UUID):
     await websocket_manager.manager.connect(user_id, websocket)
     try:
         while True:
+            # Create a new database session for each message to ensure thread safety
             db: Session = SessionLocal()
             try:
                 data = await websocket.receive_json()
                 message_data = MessageCreate.model_validate(data)
                 
+                # Moderate text content if it exists
                 if message_data.content and moderation_service.is_message_offensive(message_data.content):
                     await websocket_manager.manager.send_json({
                         "type": "moderation_warning",
@@ -61,6 +61,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: UUID):
                     }, user_id)
                     continue
                 
+                # Check if users are connected (friends)
                 are_connected = connections_repo.check_if_users_are_connected(
                     db, user1_id=user_id, user2_id=message_data.receiver_id
                 )
@@ -70,6 +71,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: UUID):
                     )
                     continue
 
+                # Save the message to the database
                 db_message = messages_services.send_message(
                     db, 
                     sender_id=user_id, 
@@ -78,39 +80,57 @@ async def websocket_endpoint(websocket: WebSocket, user_id: UUID):
                     media_url=message_data.media_url,
                     message_type=message_data.message_type
                 )
+                
+                # Prepare the response to be sent over the WebSocket
                 response_data = MessageResponse.model_validate(db_message).model_dump(mode="json")
                 if response_data['content']:
                     response_data['content'] = decrypt_message(db_message.content)
                 
+                # Push the message to the recipient
                 await websocket_manager.manager.send_json(response_data, message_data.receiver_id)
+                # Push the message back to the sender for UI confirmation
                 await websocket_manager.manager.send_json(response_data, user_id)
 
             finally:
+                # Close the session for the current message
                 db.close()
 
     except WebSocketDisconnect:
-        websocket_manager.manager.disconnect(user_id)
+        # Pass the specific websocket instance to disconnect
+        websocket_manager.manager.disconnect(user_id, websocket)
     except Exception as e:
         print(f"Error in websocket for user {user_id}: {e}")
+        # Ensure disconnection on other errors too
+        websocket_manager.manager.disconnect(user_id, websocket)
 
 
-# --- HTTP Endpoints (Unchanged) ---
+# --- HTTP ENDPOINTS FOR CHAT HISTORY AND VIDEO CALLS ---
 @router.get("/{user_id}/conversation/{other_user_id}", response_model=List[MessageResponse])
 def get_message_history(user_id: UUID, other_user_id: UUID, db: Session = Depends(get_db)):
+    """ Retrieves the chat history between the user and another user. """
     return messages_services.get_conversation(db, user1_id=user_id, user2_id=other_user_id)
 
 
 @router.get("/{user_id}/meet/{other_user_id}", response_model=MeetLinkResponse)
 async def get_video_call_link(user_id: UUID, other_user_id: UUID, db: Session = Depends(get_db)):
+    """ 
+    Generates a unique Meet link and sends a real-time notification 
+    to the other user.
+    """
     caller = user_repo.get_user_by_id(db, user_id)
     if not caller:
-        return {"error": "Caller not found."}
+        raise HTTPException(status_code=404, detail="Caller not found.")
+
     link = messages_services.generate_meet_link(user_id, other_user_id)
+    
     notification_payload = {
         "type": "video_call_invitation",
         "meet_link": link,
         "caller_name": caller.name or "A user"
     }
+    
+    # Push the notification to the other user via WebSocket
     await websocket_manager.manager.send_json(notification_payload, other_user_id)
+    
     return {"meet_link": link}
 

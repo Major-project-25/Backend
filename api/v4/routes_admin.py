@@ -15,7 +15,9 @@ import os # Import os for path operations
 router = APIRouter()
 
 # Dependency to get the current user and check if they are an admin
-def get_current_admin_user(user_id: UUID, db: Session = Depends(get_db)) -> User:
+# THE FIX: We now explicitly state that the 'user_id' for this function
+# should come from the 'admin_id' path parameter.
+def get_current_admin_user(user_id: UUID = Depends(lambda admin_id: admin_id), db: Session = Depends(get_db)) -> User:
     user = user_repo.get_user_by_id(db, user_id=user_id)
     if not user or not user.is_admin:
         raise HTTPException(
@@ -108,3 +110,4 @@ def delete_a_post(
     
     # A 204 response does not have a body, so we return nothing.
     return
+
