@@ -1,4 +1,5 @@
 # gale_cosine_recommender.py
+#we will be moving to ANN
 from typing import Dict, List, Sequence, Tuple, Optional
 import numpy as np
 
