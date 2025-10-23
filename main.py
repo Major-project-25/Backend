@@ -1,6 +1,7 @@
 # main.py
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from api.v1 import routes_users, routes_auth
 from api.v2 import routes_algo, routes_connections
 from api.v3 import routes_msg
@@ -8,26 +9,32 @@ from api.v4 import routes_admin, routes_posts
 from fastapi.staticfiles import StaticFiles
 import os
 
-# --- THIS SECTION IS UPDATED FOR ROBUST PATHS ---
-# Get the absolute path to the directory where main.py is located
-# For example: /home/pi/Documents/knowyourcampus/Backend
-SCRIPT_DIRECTORY = os.path.dirname(os.path.abspath(__file__))
+app = FastAPI(title="KnowYourCampus API")
 
-# Create a full, absolute path for the static directory
-# For example: /home/pi/Documents/knowyourcampus/Backend/static
-STATIC_DIRECTORY = os.path.join(SCRIPT_DIRECTORY, "static")
+# --- ADD THE CORS MIDDLEWARE ---
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# Create a full, absolute path for the uploads subdirectory
-UPLOADS_DIRECTORY = os.path.join(STATIC_DIRECTORY, "uploads")
-# -----------------------------------------------------------
+# --- DIRECTORY SETUP FOR UPLOADS ---
+# Get the absolute path to the directory where this main.py file lives
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# Define the main static directory
+STATIC_DIR = os.path.join(BASE_DIR, "static")
+# Define subdirectories for different types of uploads
+ADMIN_UPLOADS_DIR = os.path.join(STATIC_DIR, "uploads")
+CHAT_MEDIA_DIR = os.path.join(STATIC_DIR, "chat_media") # <-- NEW DIRECTORY FOR CHAT
 
-app = FastAPI(title="KnowyourCampus API")
+# Create all necessary directories when the app starts
+os.makedirs(ADMIN_UPLOADS_DIR, exist_ok=True)
+os.makedirs(CHAT_MEDIA_DIR, exist_ok=True) # <-- CREATE THE NEW DIRECTORY
 
-# Create the directories using the absolute path
-os.makedirs(UPLOADS_DIRECTORY, exist_ok=True)
-
-# Mount the static directory using the absolute path
-app.mount("/static", StaticFiles(directory=STATIC_DIRECTORY), name="static")
+# Mount the static directory to serve all uploaded files
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 # --- Version 1 Endpoints (Login) ---
@@ -41,7 +48,7 @@ app.include_router(routes_connections.router, prefix="/api/v2/connections", tags
 # --- Version 3 Endpoints (Messaging) ---
 app.include_router(routes_msg.router, prefix="/api/v3/messages", tags=["Messaging (v3)"])
 
-# --- Version 4 Endpoints (Admin) - --
+# --- Version 4 Endpoints (Admin & Posts) ---
 app.include_router(routes_admin.router, prefix="/api/v4/admin", tags=["Admin (v4)"])
 app.include_router(routes_posts.router, prefix="/api/v4/posts", tags=["Posts (v4)"])
 
