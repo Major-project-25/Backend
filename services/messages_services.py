@@ -1,4 +1,4 @@
-# services/messages_services.py
+# Backend/services/messages_services.py
 
 from sqlalchemy.orm import Session
 from uuid import UUID
@@ -15,16 +15,16 @@ def send_message(db: Session, sender_id: UUID, receiver_id: UUID, content: Optio
     """
     if sender_id == receiver_id:
         raise ValueError("Sender and receiver cannot be the same person.")
-    
+
     encrypted_content = None
     if content:
         # Only encrypt if there is text content
         encrypted_content = encrypt_message(content)
-    
+
     return messages_repo.create_message(
-        db, 
-        sender_id=sender_id, 
-        receiver_id=receiver_id, 
+        db,
+        sender_id=sender_id,
+        receiver_id=receiver_id,
         content=encrypted_content,
         media_url=media_url,
         message_type=message_type
@@ -36,12 +36,12 @@ def get_conversation(db: Session, user1_id: UUID, user2_id: UUID) -> List[Messag
     Decrypts messages after retrieving them.
     """
     encrypted_history = messages_repo.get_chat_history(db, user1_id, user2_id)
-    
+
     for message in encrypted_history:
         if message.content:
             # Only decrypt if there is text content
             message.content = decrypt_message(message.content)
-            
+
     return encrypted_history
 
 def generate_meet_link(user1_id: UUID, user2_id: UUID) -> str:
@@ -51,3 +51,15 @@ def generate_meet_link(user1_id: UUID, user2_id: UUID) -> str:
     ids = sorted([str(user1_id), str(user2_id)])
     room_name = hashlib.sha256("".join(ids).encode()).hexdigest()
     return f"https://meet.jit.si/KnowYourCampus-{room_name}"
+
+
+# --- MODIFIED FUNCTION ---
+def delete_message(db: Session, message_id: int, user_id: UUID) -> Message | None:
+    """
+    Business logic for deleting a message.
+    Returns the deleted message object if successful, otherwise None.
+    """
+    deleted_message = messages_repo.delete_message_by_id(
+        db, message_id=message_id, user_id=user_id
+    )
+    return deleted_message

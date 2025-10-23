@@ -103,6 +103,41 @@ async def websocket_endpoint(websocket: WebSocket, user_id: UUID):
         # Ensure disconnection on other errors too
         websocket_manager.manager.disconnect(user_id, websocket)
 
+# --- NEW HTTP ENDPOINT TO DELETE A MESSAGE ---
+@router.delete("/{message_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_chat_message(message_id: int, user_id: UUID, db: Session = Depends(get_db)):
+    """
+    Deletes a specific chat message and notifies both users via WebSocket.
+    A user can only delete a message they have sent.
+    """
+    deleted_message = messages_services.delete_message(
+        db, message_id=message_id, user_id=user_id
+    )
+
+    if not deleted_message:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Message not found or you do not have permission to delete it.",
+        )
+    
+    # --- REAL-TIME NOTIFICATION LOGIC ---
+    # Create the notification payload
+    notification = {
+        "type": "message_deleted",
+        "message_id": message_id
+    }
+    
+    # Notify both the sender and the receiver
+    sender_id = deleted_message.sender_id
+    receiver_id = deleted_message.receiver_id
+    
+    await websocket_manager.manager.send_json(notification, sender_id)
+    await websocket_manager.manager.send_json(notification, receiver_id)
+    
+    # A 204 response does not have a body, so we return nothing.
+    return
+
+
 
 # --- HTTP ENDPOINTS FOR CHAT HISTORY AND VIDEO CALLS ---
 @router.get("/{user_id}/conversation/{other_user_id}", response_model=List[MessageResponse])
