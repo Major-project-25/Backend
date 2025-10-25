@@ -2,9 +2,9 @@
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, UploadFile, File, HTTPException, status
 from sqlalchemy.orm import Session
 from uuid import UUID
-import shutil
 import os
 import uuid 
+import aiofiles  # <-- 1. IMPORT AIOFILES
 from typing import List
 from schema.messages import MessageCreate, MessageResponse, MeetLinkResponse, MediaUploadResponse
 from services import messages_services, websocket_manager, moderation_service
@@ -12,30 +12,41 @@ from repositories import connections_repo, user_repo
 from DB.session import get_db, SessionLocal
 from core.encryption import decrypt_message
 
+# --- 2. REMOVED shutil and run_in_threadpool ---
+
 router = APIRouter()
 
-# --- HTTP ENDPOINT FOR MEDIA UPLOADS ---
+# --- 3. REMOVED the save_upload_file_sync helper function ---
+
 @router.post("/upload-media", response_model=MediaUploadResponse, status_code=status.HTTP_201_CREATED)
 async def upload_media_file(file: UploadFile = File(...)):
     """
     Handles uploading image or video files for chat.
     Saves the file and returns its web-accessible URL.
+    This endpoint uses aiofiles to stream the file asynchronously.
     """
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     CHAT_MEDIA_DIR = os.path.join(BASE_DIR, "static", "chat_media")
 
     file_extension = os.path.splitext(file.filename)[1]
     
-    # Generate a standard random UUID for the filename to prevent overwrites.
     unique_filename = f"{uuid.uuid4()}{file_extension}"
-
     file_path = os.path.join(CHAT_MEDIA_DIR, unique_filename)
 
     try:
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        # --- 4. IMPLEMENTED YOUR AIOFILES SOLUTION ---
+        async with aiofiles.open(file_path, "wb") as buffer:
+            # Read the file in 1MB chunks asynchronously
+            while True:
+                chunk = await file.read(1024 * 1024) # 1 MB
+                if not chunk:
+                    break
+                await buffer.write(chunk)
+        
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Could not save file: {e}")
+    finally:
+        await file.close() # Always close the file stream
 
     media_url = f"/static/chat_media/{unique_filename}"
     return {"media_url": media_url}
@@ -103,7 +114,8 @@ async def websocket_endpoint(websocket: WebSocket, user_id: UUID):
         # Ensure disconnection on other errors too
         websocket_manager.manager.disconnect(user_id, websocket)
 
-# --- NEW HTTP ENDPOINT TO DELETE A MESSAGE ---
+
+# --- HTTP ENDPOINT TO DELETE A MESSAGE ---
 @router.delete("/{message_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_chat_message(message_id: int, user_id: UUID, db: Session = Depends(get_db)):
     """
@@ -136,7 +148,6 @@ async def delete_chat_message(message_id: int, user_id: UUID, db: Session = Depe
     
     # A 204 response does not have a body, so we return nothing.
     return
-
 
 
 # --- HTTP ENDPOINTS FOR CHAT HISTORY AND VIDEO CALLS ---
