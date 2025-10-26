@@ -5,6 +5,7 @@ from schema.user_schema import UserCreate, AccountSetup
 from core.security import hash_password
 from uuid import UUID
 from typing import List
+from datetime import date
 
 # For the Sign-Up API
 def create_user(db: Session, user: UserCreate) -> User:
@@ -30,6 +31,24 @@ def setup_user_account(db: Session, user_id: UUID, profile_data: AccountSetup) -
     for key, value in update_data.items():
         setattr(db_user, key, value)
         
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+def update_user_daily_matches(db: Session, user_id: UUID, daily_matches: List[UUID], generation_date: date) -> User | None:
+    """
+    Finds a user by their ID and updates their daily_matches list and
+    the matches_generated_at date.
+    """
+    db_user = db.query(User).filter(User.id == user_id).first()
+    
+    if not db_user:
+        return None
+
+    # Use the exact column names from your schema
+    setattr(db_user, 'daily_matches', daily_matches)
+    setattr(db_user, 'matches_generated_at', generation_date)
+    
     db.commit()
     db.refresh(db_user)
     return db_user

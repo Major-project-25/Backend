@@ -39,6 +39,7 @@ class FriendDetail(BaseModel):
     user_id: UUID
     university_reg_no: Optional[str] = None
     name: Optional[str] = None
+    unread_count: int = 0
 
     class Config:
         from_attributes = True

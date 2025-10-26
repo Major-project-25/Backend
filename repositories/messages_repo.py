@@ -1,7 +1,7 @@
 # Backend/repositories/messages_repo.py
 
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, and_
+from sqlalchemy import or_, and_, func
 from uuid import UUID
 from typing import List, Optional
 from model.messages import Message
@@ -77,3 +77,24 @@ def delete_message_by_id(db: Session, message_id: int, user_id: UUID) -> Message
 
     return message_to_delete
 
+def get_unread_message_count(db: Session, sender_id: UUID, receiver_id: UUID) -> int:
+    """
+    Counts unread messages sent from a specific sender to a specific receiver.
+    """
+    count = db.query(func.count(Message.id)).filter(
+        Message.sender_id == sender_id,
+        Message.receiver_id == receiver_id,
+        Message.is_read == False
+    ).scalar()
+    return count or 0
+
+def mark_messages_as_read(db: Session, sender_id: UUID, receiver_id: UUID):
+    """
+    Marks all unread messages from a sender to a receiver as read.
+    """
+    db.query(Message).filter(
+        Message.sender_id == sender_id,
+        Message.receiver_id == receiver_id,
+        Message.is_read == False
+    ).update({Message.is_read: True}, synchronize_session=False)
+    db.commit()

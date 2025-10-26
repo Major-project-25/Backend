@@ -34,14 +34,21 @@ def get_conversation(db: Session, user1_id: UUID, user2_id: UUID) -> List[Messag
     """
     Business logic for retrieving a chat history.
     Decrypts messages after retrieving them.
+    ---
+    NEW: Also marks all messages from user2_id to user1_id as read.
     """
+    
+    # Mark messages from the *other user* (user2_id) as read
+    messages_repo.mark_messages_as_read(db, sender_id=user2_id, receiver_id=user1_id)
+    
+    # Now, fetch the full conversation history
     encrypted_history = messages_repo.get_chat_history(db, user1_id, user2_id)
-
+    
     for message in encrypted_history:
         if message.content:
             # Only decrypt if there is text content
             message.content = decrypt_message(message.content)
-
+            
     return encrypted_history
 
 def generate_meet_link(user1_id: UUID, user2_id: UUID) -> str:
