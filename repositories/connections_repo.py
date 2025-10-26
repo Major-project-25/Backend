@@ -34,6 +34,13 @@ def get_accepted_connections(db: Session, user_id: UUID) -> List[Connection]:
         Connection.status == 'accepted'
     ).all()
 
+def get_pending_requests_sent_by_user(db: Session, user_id: UUID) -> List[Connection]:
+    """ Fetches all pending requests SENT BY the user. """
+    return db.query(Connection).filter(
+        Connection.requester_id == user_id,
+        Connection.status == 'pending'
+    ).all()
+
 def check_if_users_are_connected(db: Session, user1_id: UUID, user2_id: UUID) -> bool:
     """ Checks if an 'accepted' connection exists between two users. """
     connection = db.query(Connection).filter(

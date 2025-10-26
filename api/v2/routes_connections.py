@@ -7,7 +7,7 @@ from typing import List
 from DB.session import get_db
 from schema.connections import ConnectionRequest, ConnectionUpdate, StatusResponse, PendingRequestDetail, FriendsResponse, FriendDetail
 from services import connection_services
-from repositories import user_repo # Import user_repo to get user details
+from repositories import user_repo, messages_repo
 
 router = APIRouter()
 
@@ -63,10 +63,9 @@ def respond_to_connection_request(user_id: UUID, update: ConnectionUpdate, db: S
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
 
-# --- THIS IS THE FIXED ENDPOINT ---
 @router.get("/{user_id}/friends", response_model=FriendsResponse)
 def view_all_accepted_connections(user_id: UUID, db: Session = Depends(get_db)):
-    """ 4. Viewing All Accepted Connections (Friends) """
+    """ 4. Viewing All Accepted Connections (Friends) with unread counts. """
     connections = connection_services.view_friends(db, user_id=user_id)
     
     friends_list = []
@@ -74,12 +73,21 @@ def view_all_accepted_connections(user_id: UUID, db: Session = Depends(get_db)):
         # Determine who the "other person" in the connection is
         other_person = conn.addressee if conn.requester_id == user_id else conn.requester
         
+        # --- Calculate Unread Count ---
+        # Count messages sent FROM the other_person TO the current user (user_id)
+        unread_count = messages_repo.get_unread_message_count(
+            db, 
+            sender_id=other_person.id, 
+            receiver_id=user_id
+        )
+        
         # Create a detailed object for each friend
         friends_list.append(
             FriendDetail(
                 user_id=other_person.id,
                 university_reg_no=other_person.university_reg_no,
-                name=other_person.name
+                name=other_person.name,
+                unread_count=unread_count  # --- Add the count here ---
             )
         )
         
