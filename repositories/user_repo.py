@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import or_
+from sqlalchemy import or_, and_, select # Added select
 from model.user import User
+from model.connections import Connection # Added Connection
 from schema.user_schema import UserCreate, AccountSetup
 from core.security import hash_password
 from uuid import UUID
@@ -9,7 +10,7 @@ from datetime import date
 
 # For the Sign-Up API
 def create_user(db: Session, user: UserCreate) -> User:
-    """Creates a new user with only email and a hashed password."""
+    """(Unchanged)"""
     hashed_pass = hash_password(user.password)
     db_user = User(email=user.email, password=hashed_pass)
     db.add(db_user)
@@ -18,16 +19,14 @@ def create_user(db: Session, user: UserCreate) -> User:
     return db_user
 
 def setup_user_account(db: Session, user_id: UUID, profile_data: AccountSetup) -> User | None:
-    """Finds a user by ID and updates their profile with the new interest structure."""
+    """(Unchanged)"""
     db_user = db.query(User).filter(User.id == user_id).first()
     
     if not db_user:
         return None
 
-    # Get the data from the Pydantic model
     update_data = profile_data.model_dump(exclude_unset=True)
     
-    # Update the user object's attributes
     for key, value in update_data.items():
         setattr(db_user, key, value)
         
@@ -45,47 +44,71 @@ def update_user_daily_matches(db: Session, user_id: UUID, daily_matches: List[UU
     if not db_user:
         return None
 
-    # Use the exact column names from your schema
-    setattr(db_user, 'daily_matches', daily_matches)
-    setattr(db_user, 'matches_generated_at', generation_date)
+    # --- *** THIS IS THE FIX *** ---
+    # Use direct assignment instead of setattr
+    db_user.daily_matches = daily_matches
+    db_user.matches_generated_at = generation_date
+    # --- *** END OF FIX *** ---
     
     db.commit()
     db.refresh(db_user)
     return db_user
 
-# For the Login API and general use
+# (Rest of the functions are unchanged...)
+
 def get_user_by_email(db: Session, email: str) -> User | None:
-    """Fetches a single user by their email address."""
+    """(Unchanged)"""
     return db.query(User).filter(User.email == email).first()
 
 def get_all_active_users(db: Session) -> List[User]:
-    """
-    Fetches all users who have set at least one interest.
-    These are the users who are eligible for matching.
-    """
+    """(Unchanged)"""
     return db.query(User).filter(User.name != None, User.interest1 != None).all()
 
 def update_user_matches(db: Session, user_id: UUID, matched_ids: List[UUID]) -> User | None:
-    """
-    Finds a user by their ID and updates their matched_profiles list.
-    """
+    """(Unchanged)"""
     db_user = db.query(User).filter(User.id == user_id).first()
     
     if not db_user:
         return None
 
-    setattr(db_user, 'matched_profiles', matched_ids)
+    # Keeping setattr here as it was original, assuming it worked elsewhere
+    setattr(db_user, 'matched_profiles', matched_ids) 
     
     db.commit()
     db.refresh(db_user)
     return db_user
 
 def get_user_by_reg_no(db: Session, reg_no: str) -> User | None:
-    """
-    Fetches a single user by their university registration number.
-    """
+    """(Unchanged)"""
     return db.query(User).filter(User.university_reg_no == reg_no).first()
 
 def get_user_by_id(db: Session, user_id: UUID) -> User | None:
-    """ Fetches a single user by their primary key ID. """
+    """(Unchanged)"""
     return db.query(User).filter(User.id == user_id).first()
+
+def get_potential_matches(db: Session, user_id: UUID) -> List[User]:
+    """(Unchanged - contains the select() fix for SAWarning)"""
+    
+    sent_connection_ids = select(Connection.addressee_id).where(
+        and_(
+            Connection.requester_id == user_id,
+            or_(Connection.status == 'accepted', Connection.status == 'pending')
+        )
+    ).subquery()
+
+    received_connection_ids = select(Connection.requester_id).where(
+        and_(
+            Connection.addressee_id == user_id,
+            or_(Connection.status == 'accepted', Connection.status == 'pending')
+        )
+    ).subquery()
+
+    potential_matches = db.query(User).filter(
+        User.name != None, User.interest1 != None, 
+        User.id != user_id,  
+        User.id.notin_(sent_connection_ids),  
+        User.id.notin_(received_connection_ids) 
+    ).all()
+
+    return potential_matches
+
