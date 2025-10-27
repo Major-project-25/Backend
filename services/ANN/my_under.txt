@@ -1,0 +1,9 @@
+python src/matcher.py "machine learning=9,artificial intelligence=7,robotics=4" 6
+
+choices = [
+  ("machine learning", 9),
+  ("artificial intelligence", 7),
+  ("robotics", 4)
+]
+send a list to the matcher 
+Matcher converts into full vector:[AI:7, ML:9, DS:0, Hackathon:0, ..., Robotics:4, ..., Product Management:0]
