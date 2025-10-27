@@ -4,19 +4,15 @@ from sqlalchemy.orm import Session
 from uuid import UUID
 import os
 import uuid 
-import aiofiles  # <-- 1. IMPORT AIOFILES
+import aiofiles 
 from typing import List
 from schema.messages import MessageCreate, MessageResponse, MeetLinkResponse, MediaUploadResponse
 from services import messages_services, websocket_manager, moderation_service
-from repositories import connections_repo, user_repo
+from repositories import connections_repo, user_repo, messages_repo
 from DB.session import get_db, SessionLocal
 from core.encryption import decrypt_message
 
-# --- 2. REMOVED shutil and run_in_threadpool ---
-
 router = APIRouter()
-
-# --- 3. REMOVED the save_upload_file_sync helper function ---
 
 @router.post("/upload-media", response_model=MediaUploadResponse, status_code=status.HTTP_201_CREATED)
 async def upload_media_file(file: UploadFile = File(...)):
@@ -58,13 +54,31 @@ async def websocket_endpoint(websocket: WebSocket, user_id: UUID):
     await websocket_manager.manager.connect(user_id, websocket)
     try:
         while True:
-            # Create a new database session for each message to ensure thread safety
+            # Create a new database session for each message
             db: Session = SessionLocal()
             try:
                 data = await websocket.receive_json()
+                
+                # --- 2. ADD THIS NEW LOGIC BLOCK ---
+                message_type = data.get("type")
+
+                if message_type == "read_ack":
+                    # This is a 'message read' acknowledgment from the client
+                    message_id = data.get("message_id")
+                    if message_id:
+                        # Call repo function to mark this specific message as read
+                        # We use user_id (the connected user) as the current_user_id
+                        messages_repo.mark_message_as_read_by_id(db, message_id, user_id)
+                    
+                    continue # Skip the rest of the loop, it was just an ack
+                
+                # --- 3. This 'if' is your existing logic ---
+                # If no type, or a different type (like 'text'), it's a new chat message.
+                # We validate it against the MessageCreate schema
+                
                 message_data = MessageCreate.model_validate(data)
                 
-                # Moderate text content if it exists
+                # ... (rest of your existing logic for moderation) ...
                 if message_data.content and moderation_service.is_message_offensive(message_data.content):
                     await websocket_manager.manager.send_json({
                         "type": "moderation_warning",
@@ -72,7 +86,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: UUID):
                     }, user_id)
                     continue
                 
-                # Check if users are connected (friends)
+                # ... (rest of your existing logic for checking connection) ...
                 are_connected = connections_repo.check_if_users_are_connected(
                     db, user1_id=user_id, user2_id=message_data.receiver_id
                 )
@@ -82,7 +96,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: UUID):
                     )
                     continue
 
-                # Save the message to the database
+                # ... (rest of your existing logic for saving and sending) ...
                 db_message = messages_services.send_message(
                     db, 
                     sender_id=user_id, 
@@ -92,14 +106,11 @@ async def websocket_endpoint(websocket: WebSocket, user_id: UUID):
                     message_type=message_data.message_type
                 )
                 
-                # Prepare the response to be sent over the WebSocket
                 response_data = MessageResponse.model_validate(db_message).model_dump(mode="json")
                 if response_data['content']:
                     response_data['content'] = decrypt_message(db_message.content)
                 
-                # Push the message to the recipient
                 await websocket_manager.manager.send_json(response_data, message_data.receiver_id)
-                # Push the message back to the sender for UI confirmation
                 await websocket_manager.manager.send_json(response_data, user_id)
 
             finally:
@@ -107,11 +118,9 @@ async def websocket_endpoint(websocket: WebSocket, user_id: UUID):
                 db.close()
 
     except WebSocketDisconnect:
-        # Pass the specific websocket instance to disconnect
         websocket_manager.manager.disconnect(user_id, websocket)
     except Exception as e:
         print(f"Error in websocket for user {user_id}: {e}")
-        # Ensure disconnection on other errors too
         websocket_manager.manager.disconnect(user_id, websocket)
 
 

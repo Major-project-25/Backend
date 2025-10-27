@@ -1,11 +1,12 @@
 # Backend/repositories/messages_repo.py
 
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, and_, func
+from sqlalchemy import or_, and_, func, update
 from uuid import UUID
 from typing import List, Optional
 from model.messages import Message
 import os # <-- 1. IMPORT OS FOR FILE OPERATIONS
+import logging
 
 def create_message(db: Session, sender_id: UUID, receiver_id: UUID, content: Optional[str], media_url: Optional[str], message_type: str) -> Message:
     """ Creates and saves a new message to the database. """
@@ -22,14 +23,25 @@ def create_message(db: Session, sender_id: UUID, receiver_id: UUID, content: Opt
     return db_message
 
 
-def get_chat_history(db: Session, user1_id: UUID, user2_id: UUID) -> List[Message]:
-    """ Retrieves all messages between two users, ordered by time. """
-    return db.query(Message).filter(
-        or_(
-            (Message.sender_id == user1_id) & (Message.receiver_id == user2_id),
-            (Message.sender_id == user2_id) & (Message.receiver_id == user1_id)
-        )
-    ).order_by(Message.timestamp.asc()).all()
+def get_conversation_history(db: Session, user1_id: UUID, user2_id: UUID) -> List[Message]:
+    """
+    Retrieves all messages between two users, ordered by timestamp.
+    """
+    try:
+        # Query that finds messages where the pair matches (sender, receiver) OR (receiver, sender)
+        messages = db.query(Message).filter(
+            or_(
+                and_(Message.sender_id == user1_id, Message.receiver_id == user2_id),
+                and_(Message.sender_id == user2_id, Message.receiver_id == user1_id)
+            )
+        ).order_by(Message.timestamp.asc()).all()
+        
+        return messages
+    
+    except Exception as e:
+        logging.error(f"Error retrieving conversation history: {e}")
+        db.rollback()
+        return []
 
 
 # --- THIS FUNCTION IS NOW MODIFIED ---
@@ -88,13 +100,51 @@ def get_unread_message_count(db: Session, sender_id: UUID, receiver_id: UUID) ->
     ).scalar()
     return count or 0
 
-def mark_messages_as_read(db: Session, sender_id: UUID, receiver_id: UUID):
+def mark_conversation_as_read(db: Session, sender_id: UUID, receiver_id: UUID):
     """
-    Marks all unread messages from a sender to a receiver as read.
+    Marks all unread messages FROM sender_id TO receiver_id as read.
     """
-    db.query(Message).filter(
-        Message.sender_id == sender_id,
-        Message.receiver_id == receiver_id,
-        Message.is_read == False
-    ).update({Message.is_read: True}, synchronize_session=False)
-    db.commit()
+    try:
+        # Create an update statement
+        stmt = (
+            update(Message)
+            .where(
+                and_(
+                    Message.sender_id == sender_id,
+                    Message.receiver_id == receiver_id,
+                    Message.is_read == False
+                )
+            )
+            .values(is_read=True)
+            .execution_options(synchronize_session=False) # Important for efficiency
+        )
+        
+        db.execute(stmt)
+        db.commit()
+        
+    except Exception as e:
+        logging.error(f"Error marking conversation as read: {e}")
+        db.rollback()
+
+def mark_message_as_read_by_id(db: Session, message_id: int, current_user_id: UUID):
+    """
+    Marks a specific message as read, only if the user is the receiver.
+    This is triggered by a WebSocket 'read_ack'.
+    """
+    try:
+        # Find the specific message
+        message = db.query(Message).filter(
+            and_(
+                Message.id == message_id,
+                Message.receiver_id == current_user_id, # Security: User must be the receiver
+                Message.is_read == False
+            )
+        ).first()
+
+        if message:
+            message.is_read = True
+            db.commit()
+            
+    except Exception as e:
+        logging.error(f"Error marking single message as read: {e}")
+        db.rollback()
