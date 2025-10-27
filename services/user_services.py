@@ -1,5 +1,3 @@
-# user_services.py
-
 from sqlalchemy.orm import Session
 from uuid import UUID
 from repositories import user_repo
@@ -7,122 +5,163 @@ from schema.user_schema import UserCreate, AccountSetup
 from typing import List, Dict
 from model.user import User
 from core.security import verify_password
-from services.gale_shaples import recommend_gale_cosine
-from services.fisher_yates import fisher_yates_names
+from services.fisher_yates import fisher_yates_names # Corrected this import
+import sys
+import os
+from datetime import datetime # Added datetime
+
+# --- ANN IMPORT SETUP ---
+SERVICES_DIR = os.path.dirname(os.path.abspath(__file__))
+ANN_SRC_DIR = os.path.join(SERVICES_DIR, "ANN", "src")
+
+if ANN_SRC_DIR not in sys.path:
+    sys.path.append(ANN_SRC_DIR)
+
+try:
+    from matcher import get_top_k_from_users_flexible, expand_user_row_to_full
+    print("[INFO] ANN Matcher imported successfully.")
+except ImportError:
+    print(f"Error: Could not import from ANN/src. Make sure {ANN_SRC_DIR} is correct.")
+    get_top_k_from_users_flexible = None
+    expand_user_row_to_full = None
+
+CANONICAL_INTERESTS = [
+    'artificial intelligence', 'machine learning', 'data science', 'hackathon',
+    'full stack development', 'fintech', 'ui/ux design', 'cybersecurity',
+    'web development', 'app development', 'cloud computing', 'deep learning',
+    'robotics', 'research', 'blockchain', 'entrepreneurship',
+    'vibecoding', 'collaboration', 'trading', 'product management'
+]
+# --- END: ANN IMPORT SETUP ---
+
 
 def register_user_service(db: Session, user_data: UserCreate) -> User | None:
     """
-    Business logic for registering a new user.
-    - Checks if a user with the given email already exists.
-    - If not, it creates the user.
-    - Returns the new user object or None if the user already exists.
+    (This function is unchanged)
     """
-    # 1. Check for an existing user
     existing_user = user_repo.get_user_by_email(db, email=user_data.email)
-    
-    # 2. If user exists, return None to indicate failure
     if existing_user:
         return None
-    
-    # 3. If user does not exist, create a new one via the repository
     new_user = user_repo.create_user(db, user=user_data)
     return new_user
 
 def authenticate_user_service(db: Session, login_data: UserCreate) -> User | None:
     """
-    Business logic for user authentication.
-    - Finds the user by email.
-    - Verifies the password.
-    - Returns the user object if authentication is successful, otherwise None.
+    (This function is unchanged)
     """
-    # 1. Find the user by email via the repository
     user = user_repo.get_user_by_email(db, email=login_data.email)
-
-    # 2. Check if user exists and if the password matches
     if user and verify_password(login_data.password, user.password):
-        # 3. If credentials are valid, return the user object
         return user
-    
-    # 4. If credentials are not valid, return None
     return None
 
 def setup_profile_service(db: Session, user_id: UUID, profile_data: AccountSetup) -> User | None:
     """
-    Business logic for updating a user's profile.
-    - Checks if the new university registration number is already taken by another user.
-    - If not, it calls the repository to perform the update.
-    - Returns the updated user or raises an error.
+    (This function is unchanged)
     """
-    # 1. Check if the registration number is already in use by another user
     existing_user = user_repo.get_user_by_reg_no(db, reg_no=profile_data.university_reg_no)
-    
-    # 2. If it exists AND it belongs to a different user, raise an error
     if existing_user and existing_user.id != user_id:
         raise ValueError(f"University registration number '{profile_data.university_reg_no}' is already in use.")
-
-    # 3. If the check passes, proceed with updating the user account
     updated_user = user_repo.setup_user_account(
         db=db, user_id=user_id, profile_data=profile_data
     )
     return updated_user
 
-def generate_and_store_matches(db: Session, user_id: UUID) -> List[UUID] | None:
+def _format_user_interests(user: User) -> list[tuple[str, float]]:
     """
-    Orchestrates the entire matching process for a given user.
+    (This function is corrected to return a list of tuples)
     """
-    # 1. Fetch all users from the database who have completed their profiles
-    all_users = user_repo.get_all_active_users(db)
+    interests = [] 
+    if user.interest1 and user.interest1_weight is not None:
+        interests.append((user.interest1, float(user.interest1_weight)))
+    if user.interest2 and user.interest2_weight is not None:
+        interests.append((user.interest2, float(user.interest2_weight)))
+    if user.interest3 and user.interest3_weight is not None:
+        interests.append((user.interest3, float(user.interest3_weight)))
+    return interests
+
+
+# --- REPLACED: OLD 'generate_and_store_matches' IS REMOVED ---
+# --- ADDED: NEW ANN-BASED FUNCTION ---
+def generate_daily_matches_service(db: Session, user_id: UUID) -> List[UUID] | None:
+    """
+    Orchestrates the entire matching process for a given user using the ANN.
+    1. Gets all eligible users.
+    2. Runs the ANN model to get a ranked list of (Name, Score).
+    3. Takes the Top 10 names.
+    4. Shuffles the Top 10 names.
+    5. Maps names back to UUIDs.
+    6. Saves the *shuffled UUID list* and *today's date* to the DB.
+    7. Returns the shuffled list of UUIDs.
+    """
+    if not get_top_k_from_users_flexible:
+        raise ValueError("Matching service is unavailable. Could not import ANN model.")
+
+    # 1. Fetch the current user
+    current_user = user_repo.get_user_by_id(db, user_id)
+    if not current_user:
+        raise ValueError("User not found.")
+
+    # 2. Fetch all eligible matches
+    potential_matches = user_repo.get_potential_matches(db, user_id)
+    today = datetime.utcnow().date()
     
-    if len(all_users) < 2:
-        # Not enough users to create matches
+    # If no potential matches, save an empty list for today and return
+    if not potential_matches:
+        user_repo.update_user_daily_matches(db, user_id, [], today)
         return []
 
-    # 2. Format the data for the recommendation algorithm
-    profiles: Dict[str, Dict[str, float]] = {}
-    subjects = set()
-    user_name_to_id: Dict[str, UUID] = {}
-    user_id_to_name: Dict[UUID, str] = {}
+    # 3. Format data AND create the Name -> ID map
+    user_choices_list = _format_user_interests(current_user)
+
+    users_rows_as_dicts = []
+    user_name_to_id: Dict[str, UUID] = {}  # Map names to UUIDs
+
+    for user in potential_matches:
+        # Convert SQLAlchemy User object to a dictionary
+        users_rows_as_dicts.append({
+            "id": user.id,
+            "name": user.name,
+            "interest1": user.interest1,
+            "interest1_weight": user.interest1_weight,
+            "interest2": user.interest2,
+            "interest2_weight": user.interest2_weight,
+            "interest3": user.interest3,
+            "interest3_weight": user.interest3_weight
+        })
+        # Store the name-to-ID mapping
+        user_name_to_id[user.name] = user.id 
     
-    current_user_name = ""
-
-    for user in all_users:
-        user_name_to_id[user.name] = user.id
-        user_id_to_name[user.id] = user.name
-        if user.id == user_id:
-            current_user_name = user.name
-
-        interests = {}
-        # Collect up to 3 interests and their weights from the user model
-        if user.interest1 and user.interest1_weight is not None:
-            interests[user.interest1] = float(user.interest1_weight)
-            subjects.add(user.interest1)
-        if user.interest2 and user.interest2_weight is not None:
-            interests[user.interest2] = float(user.interest2_weight)
-            subjects.add(user.interest2)
-        if user.interest3 and user.interest3_weight is not None:
-            interests[user.interest3] = float(user.interest3_weight)
-            subjects.add(user.interest3)
-        
-        profiles[user.name] = interests
-
-    if not current_user_name:
-        raise ValueError("The user requesting matches was not found or has an incomplete profile.")
-
-    # 3. Run the Gale-Shapley and Cosine Similarity algorithm
-    # We only care about the ranked recommendations list for the current user
-    _, recommendations = recommend_gale_cosine(
-        profiles=profiles,
-        subjects=list(subjects),
-        me=current_user_name
+    # 4. Run the ANN Model
+    # This returns a list of (Name, Score) tuples, as proven by our debugging
+    ranked_matches = get_top_k_from_users_flexible(
+        choices=user_choices_list, 
+        users_rows=users_rows_as_dicts,
+        k=len(users_rows_as_dicts), # Get all matches ranked
+        interest_names=CANONICAL_INTERESTS
     )
 
-    # 4. Shuffle the resulting preference list using Fisher-Yates
-    shuffled_recommendations = fisher_yates_names(recommendations)
-
-    # 5. Convert the shuffled list of names back to a list of UUIDs
-    matched_ids = [user_name_to_id[name] for name in shuffled_recommendations]
-
-    # 6. Store the final list in the database for the current user
-    user_repo.update_user_matches(db=db, user_id=user_id, matched_ids=matched_ids)
+    # 5. Take the top 10, extract names, and shuffle
+    top_10_matches = ranked_matches[:10]
     
-    return matched_ids
+    # Get the names from the (Name, Score) tuples
+    top_10_names = [match[0] for match in top_10_matches] 
+
+    # Shuffle the list of names (Requirement #1)
+    shuffled_names = fisher_yates_names(top_10_names)
+
+    # Map shuffled names back to UUIDs
+    shuffled_ids = [user_name_to_id[name] for name in shuffled_names]
+
+    # 6. Store the final list of UUIDs (Step 4 & 5)
+    # --- *** THIS IS THE CRITICAL FIX *** ---
+    # We must pass 'generation_date=today' so the list is saved for the day.
+    user_repo.update_user_daily_matches(
+        db=db,
+        user_id=user_id,
+        daily_matches=shuffled_ids, # This is now a list of UUIDs
+        generation_date=today
+    )
+    # --- *** END OF FIX *** ---
+    
+    return shuffled_ids
+
