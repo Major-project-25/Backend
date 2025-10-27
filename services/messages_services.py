@@ -7,6 +7,7 @@ from repositories import messages_repo
 from model.messages import Message
 from core.encryption import encrypt_message, decrypt_message
 import hashlib
+import logging
 
 def send_message(db: Session, sender_id: UUID, receiver_id: UUID, content: Optional[str], media_url: Optional[str], message_type: str) -> Message:
     """
@@ -32,24 +33,33 @@ def send_message(db: Session, sender_id: UUID, receiver_id: UUID, content: Optio
 
 def get_conversation(db: Session, user1_id: UUID, user2_id: UUID) -> List[Message]:
     """
-    Business logic for retrieving a chat history.
-    Decrypts messages after retrieving them.
-    ---
-    NEW: Also marks all messages from user2_id to user1_id as read.
+    Retrieves the chat history between two users.
+    Crucially, also marks all messages *to* user1 *from* user2 as read.
     """
-    
-    # Mark messages from the *other user* (user2_id) as read
-    messages_repo.mark_messages_as_read(db, sender_id=user2_id, receiver_id=user1_id)
-    
-    # Now, fetch the full conversation history
-    encrypted_history = messages_repo.get_chat_history(db, user1_id, user2_id)
-    
-    for message in encrypted_history:
-        if message.content:
-            # Only decrypt if there is text content
-            message.content = decrypt_message(message.content)
+    try:
+        # --- 1. ADD THIS LINE ---
+        # Mark all messages sent FROM other_user_id (user2_id) TO me (user1_id) as read
+        messages_repo.mark_conversation_as_read(db, sender_id=user2_id, receiver_id=user1_id)
+
+        # --- 2. The rest of the function is the same ---
+        messages = messages_repo.get_conversation_history(db, user1_id, user2_id)
+        
+        # Decrypt content for sending to the client
+        decrypted_messages = []
+        for msg in messages:
+            if msg.content:
+                try:
+                    msg.content = decrypt_message(msg.content)
+                except Exception as e:
+                    logging.warning(f"Failed to decrypt message {msg.id}: {e}")
+                    msg.content = "[Message decryption failed]"
+            decrypted_messages.append(msg)
             
-    return encrypted_history
+        return decrypted_messages
+        
+    except Exception as e:
+        logging.error(f"Error in get_conversation service: {e}")
+        return []
 
 def generate_meet_link(user1_id: UUID, user2_id: UUID) -> str:
     """
